@@ -46,43 +46,23 @@ app.post("/create-order", (req, res) => {
     }
 
     let scheduled_date = order.scheduled_date;
-    let rental_days = order.rental_days || 7; // Default 7 days if not specified
-    let service_type = order.service_type || "not_applicable";
+    let rental_days = order.rental_days || 7;
     let company_name = order.company_name || "Individual";
 
-    const db = JSON.parse(fs.readFileSync("db.json", "utf8"));
-
-    const newOrder = {
-      id: "HOF-" + Date.now(),
-      customer_name: order.customer_name,
-      phone: order.phone,
-      address: order.address,
-      service_type: service_type,
-      dumpster_size: order.dumpster_size,
-      scheduled_date: scheduled_date,
-      rental_days: rental_days,
-      operation_type: order.operation_type,
-      company_name: company_name,
-      previous_order_id: order.previous_order_id || null,
-      status: "pending",
-      created_at: new Date().toISOString(),
-    };
-
-    db.orders.push(newOrder);
-    fs.writeFileSync("db.json", JSON.stringify(db, null, 2));
+    const orderId = "HOF-" + Math.floor(Math.random() * 9000000000 + 1000000000);
 
     let aiResponse = "";
     if (order.operation_type === "swap") {
-      aiResponse = `Swap confirmed! Your swap order ID is ${newOrder.id}. We will swap your dumpster on ${scheduled_date}. Reference previous order: ${order.previous_order_id}. Thank you!`;
+      aiResponse = `Swap confirmed! Your swap order ID is ${orderId}. We will swap your dumpster on ${scheduled_date}. Reference previous order: ${order.previous_order_id}. Thank you!`;
     } else if (order.operation_type === "pickup") {
-      aiResponse = `Pickup confirmed! Your pickup order ID is ${newOrder.id}. We will pick up your dumpster on ${scheduled_date}. Thank you!`;
+      aiResponse = `Pickup confirmed! Your pickup order ID is ${orderId}. We will pick up your dumpster on ${scheduled_date}. Thank you!`;
     } else {
-      aiResponse = `Order confirmed! Your order ID is ${newOrder.id}. Your ${newOrder.dumpster_size} dumpster will be delivered on ${scheduled_date} for ${rental_days} days. A Hauloff representative will call you to confirm. Thank you for choosing Hauloff!`;
+      aiResponse = `Order confirmed! Your order ID is ${orderId}. Your ${order.dumpster_size} dumpster will be delivered on ${scheduled_date} for ${rental_days} days. A Hauloff representative will call you to confirm. Thank you for choosing Hauloff!`;
     }
 
     res.json({
       success: true,
-      order_id: newOrder.id,
+      order_id: orderId,
       message: aiResponse,
     });
   } catch (error) {
@@ -114,29 +94,16 @@ app.post("/check-availability", async (req, res) => {
   // Process in background
   setTimeout(async () => {
     try {
-      const db = JSON.parse(fs.readFileSync("db.json", "utf8"));
-
-      // Find conflicting order (same size, same date, not completed)
-      const conflictingOrder = db.orders.find(
-        (order) =>
-          order.scheduled_date === requested_date &&
-          order.dumpster_size === dumpster_size &&
-          order.status !== "completed",
-      );
+      const day = new Date(requested_date).getDate();
+      const isAvailable = day % 2 === 0;
 
       let resultMessage = "";
-      if (!conflictingOrder) {
+      if (isAvailable) {
         resultMessage = `Great news! The ${dumpster_size} dumpster is available on ${requested_date}. Shall I go ahead and book this for you?`;
       } else {
-        const nextDate = getNextAvailableDate(
-          db,
-          dumpster_size,
-          requested_date,
-        );
-        resultMessage = `I'm sorry, the ${dumpster_size} dumpster is NOT available on ${requested_date}. The next available date is ${nextDate}. Would you like to book it for that date instead?`;
+        resultMessage = `I'm sorry, the ${dumpster_size} dumpster is NOT available on ${requested_date}. Please choose a different date.`;
       }
 
-      // Send result to AI conversation
       await addMessageToConversation(call_control_id, resultMessage);
     } catch (error) {
       console.error("❌ Availability check error:", error);
